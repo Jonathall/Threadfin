@@ -62,35 +62,44 @@ ENV THREADFIN_BIN=/home/threadfin/bin \
 # Set working directory
 WORKDIR $THREADFIN_HOME
 
-# Arguments to add the jellyfin repository
 ARG TARGETARCH
-ARG OS_VERSION=ubuntu
-ARG OS_CODENAME=noble
+# Fork patch: FFmpeg branch to fetch from BtbN static builds (see RUN below)
+ARG FFMPEG_BRANCH=8.1
 
 # Install dependencies in a single layer
+# Fork patch (Jonathall): FFmpeg comes from the BtbN static build of the
+# pinned branch below instead of Ubuntu noble's ffmpeg (6.1.1) and
+# jellyfin-ffmpeg7 (7.1.x). Both shipped versions are below the fixed
+# thresholds for PixelSmash CVE-2026-8461 (6.1.6 / 7.1.5 / 8.1.2).
+# Symlinks keep the legacy paths (/usr/bin/ffmpeg,
+# /usr/lib/jellyfin-ffmpeg/ffmpeg) resolving to the patched binary.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
-    ffmpeg \
     vlc \
     tzdata \
-    gnupg \
-    apt-transport-https && \
+    xz-utils && \
     mkdir -p $THREADFIN_BIN $THREADFIN_CONF $THREADFIN_TEMP $THREADFIN_HOME/cache && \
     chmod a+rwX $THREADFIN_CONF $THREADFIN_TEMP && \
     sed -i 's/geteuid/getppid/' /usr/bin/vlc && \
-    curl -fsSL https://repo.jellyfin.org/master/ubuntu/jellyfin_team.gpg.key \
-        | gpg --dearmor -o /etc/apt/trusted.gpg.d/ubuntu-jellyfin.gpg && \
-    (if [ "${TARGETARCH}" = "arm" ]; then \
-        echo "deb [arch=armhf] https://repo.jellyfin.org/master/${OS_VERSION} ${OS_CODENAME} main" > /etc/apt/sources.list.d/jellyfin.list; \
-    else \
-        echo "deb [arch=${TARGETARCH}] https://repo.jellyfin.org/master/${OS_VERSION} ${OS_CODENAME} main" > /etc/apt/sources.list.d/jellyfin.list; \
-    fi) && \
-    apt-get update && \
-    apt-get install --no-install-recommends --no-install-suggests --yes \
-        jellyfin-ffmpeg7 && \
-    apt-get remove gnupg apt-transport-https --yes  && \
+    case "${TARGETARCH}" in \
+        amd64) BTBN_ARCH="linux64" ;; \
+        arm64) BTBN_ARCH="linuxarm64" ;; \
+        *) echo "No BtbN build for TARGETARCH=${TARGETARCH}" >&2; exit 1 ;; \
+    esac && \
+    curl -fsSL -o /tmp/ffmpeg-btbn.tar.xz \
+        "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n${FFMPEG_BRANCH}-latest-${BTBN_ARCH}-gpl-${FFMPEG_BRANCH}.tar.xz" && \
+    mkdir -p /tmp/btbn && \
+    tar -xJf /tmp/ffmpeg-btbn.tar.xz -C /tmp/btbn --strip-components=1 && \
+    install -m 0755 /tmp/btbn/bin/ffmpeg /tmp/btbn/bin/ffprobe /usr/local/bin/ && \
+    mkdir -p /usr/lib/jellyfin-ffmpeg && \
+    ln -sf /usr/local/bin/ffmpeg /usr/lib/jellyfin-ffmpeg/ffmpeg && \
+    ln -sf /usr/local/bin/ffprobe /usr/lib/jellyfin-ffmpeg/ffprobe && \
+    ln -sf /usr/local/bin/ffmpeg /usr/bin/ffmpeg && \
+    ln -sf /usr/local/bin/ffprobe /usr/bin/ffprobe && \
+    rm -rf /tmp/ffmpeg-btbn.tar.xz /tmp/btbn && \
+    ffmpeg -version && \
     apt-get clean autoclean --yes && \
     apt-get autoremove --yes && \
     rm -rf /var/cache/apt/archives* /var/lib/apt/lists/*
