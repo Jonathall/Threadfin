@@ -115,7 +115,9 @@ func parseMetaDataOptimized(channel string) map[string]string {
 		}
 	}
 
-	if len(lines) < 2 {
+	// lines holds only the non-# lines of the block (the stream URL);
+	// the #EXTINF line is filtered out above and parsed separately below.
+	if len(lines) < 1 {
 		return nil // Invalid channel format
 	}
 
