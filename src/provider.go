@@ -325,13 +325,12 @@ func downloadFileFromServer(providerURL string, proxyUrl string) (filename strin
 		return
 	}
 
-	// Derive a timeout: prefer configured buffer timeout if provided, else default to 30s
-	requestTimeout := 30 * time.Second
-	if Settings.BufferTimeout > 0 {
-		requestTimeout = time.Duration(Settings.BufferTimeout*1000) * time.Millisecond
-	}
-
-	httpClient := &http.Client{Timeout: requestTimeout}
+	// No total timeout on provider downloads: playlist and XMLTV files can
+	// be very large and served slowly, so a fixed cap aborts legitimate
+	// updates. (A 30s default derived from the stream buffer timeout was
+	// introduced in the 1.2.38-1.2.40 dev cycle; buffer.timeout is a
+	// per-stream setting in milliseconds, unrelated to download duration.)
+	httpClient := &http.Client{}
 
 	if proxyUrl != "" {
 		proxyURL, err := url.Parse(proxyUrl)
@@ -340,7 +339,6 @@ func downloadFileFromServer(providerURL string, proxyUrl string) (filename strin
 		}
 
 		httpClient = &http.Client{
-			Timeout: requestTimeout,
 			Transport: &http.Transport{
 				Proxy: http.ProxyURL(proxyURL),
 			},
