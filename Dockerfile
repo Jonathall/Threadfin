@@ -73,6 +73,8 @@ ARG FFMPEG_BRANCH=8.1
 # thresholds for PixelSmash CVE-2026-8461 (6.1.6 / 7.1.5 / 8.1.2).
 # Symlinks keep the legacy paths (/usr/bin/ffmpeg,
 # /usr/lib/jellyfin-ffmpeg/ffmpeg) resolving to the patched binary.
+# TARGETARCH is provided by BuildKit; classic builders leave it empty,
+# so fall back to the architecture of the image being built.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     ca-certificates \
@@ -83,10 +85,11 @@ RUN apt-get update && \
     mkdir -p $THREADFIN_BIN $THREADFIN_CONF $THREADFIN_TEMP $THREADFIN_HOME/cache && \
     chmod a+rwX $THREADFIN_CONF $THREADFIN_TEMP && \
     sed -i 's/geteuid/getppid/' /usr/bin/vlc && \
-    case "${TARGETARCH}" in \
+    BUILD_ARCH="${TARGETARCH:-$(dpkg --print-architecture)}" && \
+    case "${BUILD_ARCH}" in \
         amd64) BTBN_ARCH="linux64" ;; \
         arm64) BTBN_ARCH="linuxarm64" ;; \
-        *) echo "No BtbN build for TARGETARCH=${TARGETARCH}" >&2; exit 1 ;; \
+        *) echo "No BtbN build for architecture=${BUILD_ARCH}" >&2; exit 1 ;; \
     esac && \
     curl -fsSL -o /tmp/ffmpeg-btbn.tar.xz \
         "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n${FFMPEG_BRANCH}-latest-${BTBN_ARCH}-gpl-${FFMPEG_BRANCH}.tar.xz" && \
