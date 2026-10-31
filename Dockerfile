@@ -2,7 +2,7 @@
 # -----------------------------------------------------------------------------
 ARG USE_NVIDIA
 
-FROM golang:1.23-bullseye AS builder
+FROM golang:1.27.3-trixie AS builder
 
 WORKDIR /app
 
